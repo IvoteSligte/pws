@@ -1,6 +1,5 @@
 import random
 import numpy as np
-import fitness
 
 WORDS = [[ord(l) - 97 for l in word.rstrip()]
          for word in open("possible_words.txt")]
@@ -22,13 +21,12 @@ def gen_input():
             data.extend(list(np.array(word) / 25) + list(np.array(colours) / 2))
             guesses.append(word)
 
-    data.extend([0 for _ in range(fitness.INPUT_SIZE - len(data))])
+    data.extend([0 for _ in range(50 - len(data))])
 
     return (data, solution)
 
-# r,y,g to 0,1,2
 
-
+# r,y,g to 0.0, 0.5, 1.0
 def colour(word, solution):
     colours = [0, 0, 0, 0, 0]  # full gray default
 
