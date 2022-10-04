@@ -18,7 +18,7 @@ parent_selection_type = "rank"
 crossover_type = "scattered"
 
 mutation_type = "random"
-mutation_probability = 0.1
+mutation_probability = 0.2
 
 random_mutation_min_val = -1.0 / fitness.L
 random_mutation_max_val = 1.0 / fitness.L
