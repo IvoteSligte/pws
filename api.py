@@ -1,6 +1,3 @@
-# available commands: train (create/load), play, test (test AI on all wordle words), plot (AI training data)
-
-
 from load import load
 from create import create, fitness_func
 from general import *
@@ -28,7 +25,7 @@ def train():
         elif (training_type == "load"):
             load(generations)
     else:
-        print("The number of training generations needs to be greater than one")
+        print("The number of training generations needs to be greater than one.")
 
 
 # creates a bar plot displaying the number of guesses in which the AI finished the game
@@ -59,7 +56,7 @@ def plot_fitness(fitness_scores, save_dir=None):
 
     indices = range(generations_completed)
     plt.scatter(indices, fitness_scores, color="r", edgecolor="none", alpha=0.3)
-    
+
     if not save_dir is None:
         plt.savefig(fname=save_dir,
                                   bbox_inches='tight')
@@ -74,7 +71,7 @@ def select_best_solution(ga_instance: pygad.GA, model):
     selected_words = [random_wordle_word() for _ in range(10)]
     
     # same principle as the fitness function in `create` and `load`
-    def selection_fitness_func(solution, solution_idx): # TODO: copy create/load fitness function code here
+    def selection_fitness_func(solution, solution_idx):
         global possible_wordle_words, allowed_wordle_words
         total_fitness = 0.0
         
@@ -89,8 +86,12 @@ def select_best_solution(ga_instance: pygad.GA, model):
             invalid_words = 0
 
             for i in range(6):
+                # convert input values to tensor
+                input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
+                
                 # get AI output
-                output_values = list(np.floor(model.predict(np.array([input_values]), verbose=0)[0] * 25.0))
+                output_tensor = model(input_tensor)[0]
+                output_values = list(np.floor(np.array(output_tensor) * 25.0))
 
                 # mark the guess with wordle's grey, yellow, green colours
                 # see paper for their meanings
@@ -161,8 +162,12 @@ def test():
         invalid_words = 0
 
         for i in range(6):
+            # convert input values to tensor
+            input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
+            
             # get AI output
-            output_values = list(np.floor(model.predict(np.array([input_values]), verbose=0)[0] * 25.0))
+            output_tensor = model(input_tensor)[0]
+            output_values = list(np.floor(np.array(output_tensor) * 25.0))
 
             # mark the guess with wordle's grey, yellow, green colours
             # see paper for their meanings
@@ -198,7 +203,8 @@ def test():
     fitness_values, finishes = [], [0 for _ in range(7)]
     for i, w in enumerate(possible_wordle_words):
         if i % 10 == 0:
-            print(f"{i}/{len(possible_wordle_words)} games played. Percentage won: {1.0-finishes[0]/(i+1)*100.0:0.2f}")
+            print(f"\nGame: {i} / {len(possible_wordle_words)}")
+            print(f"Percentage won: {1.0-finishes[0]/(i+1)*100.0:0.2f}")
         fv, rf = modified_fitness_func(w)
         fitness_values.append(fv)
         finishes[rf] += 1

@@ -1,6 +1,5 @@
 from collections import defaultdict
 import copy
-import gc
 from math import floor
 import time
 import pygad
@@ -27,7 +26,7 @@ def random_wordle_word():
     return possible_wordle_words[random.randrange(len(possible_wordle_words))]
 
 
-training_generations = None
+num_generations = None
 generations_passed = 0
 fitness_scores_since_save = [[]]
 first_guesses_since_save = [[]]
@@ -57,13 +56,13 @@ def on_generation(ga_instance):
 
     generations_passed += 1
     time_taken = (time.time_ns() - start_time) / 1_000_000_000.0
-    print("\nGeneration:", generations_passed)
+    print(f"\nGeneration: {generations_passed} / {num_generations}")
     print("Time taken:", format_secs(time_taken))
     print("Estimated time left:", format_secs(time_taken /
-          generations_passed * (training_generations - generations_passed)))
+          generations_passed * (num_generations - generations_passed)))
 
-    # auto saves every 10 mins
-    if time.time_ns() - last_save_time > 600e9:
+    # auto saves every 5 mins
+    if time.time_ns() - last_save_time > 300e9:
         save_count += 1
         save_ga(ga_instance, ai_name)
         last_save_time = time.time_ns()
@@ -154,17 +153,15 @@ def save_ga(ga_instance: pygad.GA, name: str):
     global fitness_scores_since_save, first_guesses_since_save, last_save_time
 
     print("\nSaving...")
-    # TODO: average fitness of every generation
     
     length_of_column = len(fitness_scores_since_save[1]) # required cause pygad is wack
     fitness_scores = copy.deepcopy([x[:length_of_column] for x in fitness_scores_since_save if len(x) != 0])
     first_guesses = copy.deepcopy([x[:length_of_column] for x in first_guesses_since_save if len(x) != 0])
     # initial value is time since last update, time before last update is added later
-    time_trained = (time.time_ns() - last_save_time) / 1e9 % 600
+    time_trained = (time.time_ns() - last_save_time) / 1e9 % 300
 
     fitness_scores_since_save.clear()
     first_guesses_since_save.clear()
-    gc.collect()
 
     os.makedirs(join("instances", name), exist_ok=True)
     if os.path.exists(join("instances", name, "training_data.txt")):
@@ -180,6 +177,7 @@ def save_ga(ga_instance: pygad.GA, name: str):
         file.write(jd)
 
     ga_instance.save(join("instances", name, "algorithm"))
+    
     return fitness_scores
 
 

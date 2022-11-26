@@ -23,10 +23,13 @@ def fitness_func(solution, solution_idx):
         input_values = [-1.0] * 50
         
         for i in range(6):
+            # convert input values to tensor
+            input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
+            
             # get AI output
-            output_values = list(np.floor(model.predict(
-                np.array([input_values]), verbose=0)[0] * 25.0))
-
+            output_tensor = model(input_tensor)[0]
+            output_values = list(np.floor(np.array(output_tensor) * 25.0))
+            
             # mark the guess with wordle's grey, yellow, green colours
             # see paper for their meanings
             colours = colour(output_values, correct_output_values[j])
@@ -49,7 +52,7 @@ def fitness_func(solution, solution_idx):
 
             # log2(0) returns undefined values, and the AI is supposed to avoid having no words left
             if len(remaining_words) == 0:
-                return 0.0  # TODO: remove invalid_words from the other fitness functions too if this works
+                return 0.0
 
             # information
             fitness += -log2(len(remaining_words) / prev_remaining_words_len)
@@ -68,19 +71,24 @@ def fitness_func(solution, solution_idx):
 def create(num_generations):
     global model
 
-    general.training_generations = num_generations
+    general.num_generations = num_generations
 
     num_solutions = 8  # number of AI instances in a generation
-    layers = int(input("Number of hidden layers (default = 10): "))
+    num_layers = int(input("Number of hidden layers (default = 10): "))
     nodes_per_layer = int(
         input("Number of nodes per hidden layer (default = 50): "))
     nodes_per_layer = 50
+    
+    keep_parents = -1
+    keep_elitism = 1
 
     # Keras model
-    model = tf.keras.models.Sequential([tf.keras.Input(shape=50)])
-    for _ in range(layers):
-        model.add(tf.keras.layers.Dense(nodes_per_layer, activation="sigmoid"))
-    model.add(tf.keras.layers.Dense(5, activation="sigmoid"))
+    layers = [tf.keras.Input(shape=50)]
+    for _ in range(num_layers):
+        layers.append(tf.keras.layers.Dense(nodes_per_layer, activation="sigmoid"))
+    layers.append(tf.keras.layers.Dense(5, activation="sigmoid"))
+    model = tf.keras.models.Sequential(layers)
+    model.call = tf.function(model.call)
 
     keras_ga = pygad.kerasga.KerasGA(model=model, num_solutions=num_solutions)
 
@@ -95,11 +103,15 @@ def create(num_generations):
 
     settings = load_settings()
 
-    ga_instance = settings.create_ga(num_generations=num_generations,
-                                     initial_population=initial_population,
-                                     fitness_func=fitness_func,
-                                     on_start=on_start,
-                                     on_generation=on_generation,)
+    ga_instance = settings.create_ga(
+        num_generations=num_generations,
+        initial_population=initial_population,
+        fitness_func=fitness_func,
+        on_start=on_start,
+        on_generation=on_generation,
+        keep_parents=keep_parents,
+        keep_elitism=keep_elitism,
+    )
 
     name = input("AI name: ")
     while os.path.exists(join("instances", name)):
@@ -109,8 +121,13 @@ def create(num_generations):
 
     model.save(join("instances", name, "model"))
     with open(join("instances", name, "creation_data.txt"), "w") as file:
-        jd = json.dumps(
-            {"layers": layers, "nodes_per_layer": nodes_per_layer, "num_solutions": num_solutions})
+        jd = json.dumps({
+            "layers": num_layers,
+            "nodes_per_layer": nodes_per_layer,
+            "num_solutions": num_solutions, 
+            "keep_parents": keep_parents,
+            "keep_elitism": keep_elitism,
+        })
         file.write(jd)
     
     with open(join("instances", name, "settings.txt"), "w") as file:

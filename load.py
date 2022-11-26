@@ -23,10 +23,13 @@ def fitness_func(solution, solution_idx):
         input_values = [-1.0] * 50
         
         for i in range(6):
+            # convert input values to tensor
+            input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
+            
             # get AI output
-            output_values = list(np.floor(model.predict(
-                np.array([input_values]), verbose=0)[0] * 25.0))
-
+            output_tensor = model(input_tensor)[0]
+            output_values = list(np.floor(np.array(output_tensor) * 25.0))
+            
             # mark the guess with wordle's grey, yellow, green colours
             # see paper for their meanings
             colours = colour(output_values, correct_output_values[j])
@@ -49,7 +52,7 @@ def fitness_func(solution, solution_idx):
 
             # log2(0) returns undefined values, and the AI is supposed to avoid having no words left
             if len(remaining_words) == 0:
-                return 0.0  # TODO: remove invalid_words from the other fitness functions too if this works
+                return 0.0
 
             # information
             fitness += -log2(len(remaining_words) / prev_remaining_words_len)
@@ -91,7 +94,7 @@ def load(num_generations):
     
     ga_instance.num_generations = num_generations
     ga_instance.fitness_func = fitness_func
-    general.training_generations = num_generations
+    general.num_generations = num_generations
     general.ai_name = name
     
     ga_instance.run()
