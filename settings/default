@@ -1,1 +1,1 @@
-{"num_parents_mating": 4, "parent_selection_type": "rws", "crossover_type": "scattered", "keep_parents": 0, "keep_elitism": 4, "mutation_type": "random", "mutation_probability": 0.1, "random_mutation_min_val": -1.0, "random_mutation_max_val": 1.0}
+{"num_parents_mating": 4, "parent_selection_type": "rank", "crossover_type": "scattered", "keep_parents": -1, "keep_elitism": 0, "mutation_type": "random", "mutation_probability": 0.2, "random_mutation_min_val": -1.0, "random_mutation_max_val": 1.0}

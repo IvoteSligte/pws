@@ -1,27 +1,29 @@
 from dataclasses import dataclass
+from typing import Tuple
 import pygad
 import json
 
 
+# stores settings that can be changed in between training cycles
 @dataclass
 class Settings:
     num_parents_mating: int = 4
-    parent_selection_type: str = "rws"
+    parent_selection_type: str = "rank"
     crossover_type: str = "scattered"
-    keep_parents: int = 0
-    keep_elitism: int = 4
+    keep_parents: int = -1
+    keep_elitism: int = 1
     mutation_type: str = "random"
-    mutation_probability: int = 0.1
+    mutation_probability: int = 0.2
     random_mutation_min_val: int = -1.0
     random_mutation_max_val: int = 1.0
 
-    def create_ga(self, initial_population, fitness_func, on_generation, on_stop, num_generations) -> pygad.GA:
+    def create_ga(self, initial_population, fitness_func, on_start, on_generation, num_generations) -> pygad.GA:
         return pygad.GA(
             num_generations=num_generations,
             initial_population=initial_population,
             fitness_func=fitness_func,
+            on_start=on_start,
             on_generation=on_generation,
-            on_stop=on_stop,
             num_parents_mating=self.num_parents_mating,
             parent_selection_type=self.parent_selection_type,
             crossover_type=self.crossover_type,

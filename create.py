@@ -1,64 +1,90 @@
-from general import *
-import general
 from math import log2
-from settings import Settings
+import general
+from general import *
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow as tf
 
 
 model = tf.keras.models.Sequential()
 
 
 def fitness_func(solution, solution_idx):
-    global model
+    global model, correct_output_values, first_guesses_since_save, fitness_scores_since_save, possible_wordle_words, allowed_wordle_words
 
-    data_inputs = []
-    data_outputs = random_word()
+    input_values = [-1.0] * 50
+    remaining_words = possible_wordle_words
 
     fitness = 0.0
 
-    remaining_words = wordle_words
+    set_neural_network_weights(model, solution)
 
-    for _ in range(6):
-        data = np.array(
-            [data_inputs + [0.0] * (50 - len(data_inputs))])
+    for j in range(10):
+        remaining_words = possible_wordle_words
+        input_values = [-1.0] * 50
+        
+        for i in range(6):
+            # get AI output
+            output_values = list(np.floor(model.predict(
+                np.array([input_values]), verbose=0)[0] * 25.0))
 
-        predictions = list(np.floor(predict(
-            model=model, solution=solution, data=data)[0] * 26.0))
+            # mark the guess with wordle's grey, yellow, green colours
+            # see paper for their meanings
+            colours = colour(output_values, correct_output_values[j])
 
-        colours = list(np.array(colour(predictions, data_outputs)) / 2)
+            # add current guess to the inputs for the next guess
+            input_values[i*10:(i+1)*10] = output_values + colours
 
-        data_inputs.extend(predictions + colours)
+            prev_remaining_words_len = len(remaining_words)
+            # calculate the possible remaining words
+            remaining_words = options_from_guess(
+                remaining_words, colours, output_values)
 
-        total_words = len(remaining_words)
-        remaining_words = options_from_guess(
-            remaining_words, colours, predictions)
-        if len(remaining_words) == 0:
-            return 0
-        fitness += -log2(len(remaining_words) / total_words)
+            if i == 0:  # store training data
+                first_guesses_since_save[-1].append(''.join(chr(int(l) + 97)
+                                                            for l in output_values))
 
-    best_fitness_scores[-1] = max(best_fitness_scores[-1], fitness)
+            # if invalid word, reduce fitness
+            if tuple(output_values) not in allowed_wordle_words:
+                fitness -= 1.0
+
+            # log2(0) returns undefined values, and the AI is supposed to avoid having no words left
+            if len(remaining_words) == 0:
+                return 0.0  # TODO: remove invalid_words from the other fitness functions too if this works
+
+            # information
+            fitness += -log2(len(remaining_words) / prev_remaining_words_len)
+
+            # if AI wins, break the loop
+            if tuple(output_values) == correct_output_values[j]:
+                fitness += 1.0
+                break
+
+    # save training data
+    fitness_scores_since_save[-1].append(fitness)
 
     return fitness
 
 
 def create(num_generations):
     global model
-    
-    general.num_generations = num_generations
-    
-    layers = int(input("Number of hidden layers (default = 100): "))
+
+    general.training_generations = num_generations
+
+    num_solutions = 8  # number of AI instances in a generation
+    layers = int(input("Number of hidden layers (default = 10): "))
     nodes_per_layer = int(
         input("Number of nodes per hidden layer (default = 50): "))
-    num_solutions = 8
+    nodes_per_layer = 50
 
     # Keras model
     model = tf.keras.models.Sequential([tf.keras.Input(shape=50)])
     for _ in range(layers):
         model.add(tf.keras.layers.Dense(nodes_per_layer, activation="sigmoid"))
     model.add(tf.keras.layers.Dense(5, activation="sigmoid"))
-    
+
     keras_ga = pygad.kerasga.KerasGA(model=model, num_solutions=num_solutions)
 
-    if (len(tf.config.list_physical_devices('GPU')) == 0):
+    if len(tf.config.list_physical_devices('GPU')) == 0:
         print("\nNo GPUs detected. Continuing on CPU.")
 
     # PyGAD parameters
@@ -66,33 +92,39 @@ def create(num_generations):
 
     os.makedirs("instances", exist_ok=True)
     os.makedirs("settings", exist_ok=True)
-    with open(join("settings", "default"), "w") as file:
-        file.write(Settings().to_json())
 
     settings = load_settings()
 
     ga_instance = settings.create_ga(num_generations=num_generations,
                                      initial_population=initial_population,
                                      fitness_func=fitness_func,
-                                     on_generation=on_generation,
-                                     on_stop=on_stop)
+                                     on_start=on_start,
+                                     on_generation=on_generation,)
 
     name = input("AI name: ")
-    while (os.path.exists(join("instances", name))):
+    while os.path.exists(join("instances", name)):
         name = input(
             f"\nAI with the name `{name}` already exists.\nPlease enter a new name.\n\nAI name: ")
-    
-    model.save(join("instances", name, "model"))
     general.ai_name = name
+
+    model.save(join("instances", name, "model"))
+    with open(join("instances", name, "creation_data.txt"), "w") as file:
+        jd = json.dumps(
+            {"layers": layers, "nodes_per_layer": nodes_per_layer, "num_solutions": num_solutions})
+        file.write(jd)
     
+    with open(join("instances", name, "settings.txt"), "w") as file:
+        file.write(settings.to_json())
+
     ga_instance.run()
-    save_ga(ga_instance, name)
-    plot_fitness(save_dir="fitness")
+    fitness_scores = save_ga(ga_instance, name)
+    plot_fitness_training(fitness_scores, save_dir=join(
+        "instances", name, "fitness"))
 
 
-if (__name__ == "__main__"):
+if __name__ == "__main__":
     generations = int(input("Number of generations to train for: "))
-    if (generations >= 2):
+    if generations >= 2:
         create(generations)
     else:
         print("The number of training generations needs to be greater than one.")
