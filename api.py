@@ -1,6 +1,6 @@
+from general import *
 from load import load
 from create import create, fitness_func
-from general import *
 from matplotlib import pyplot as plt
 import json
 from math import log2
@@ -68,63 +68,48 @@ def plot_fitness(fitness_scores, save_dir=None):
 # but for testing and playing only one is required so the best one is used
 def select_best_solution(ga_instance: pygad.GA, model):
     # all solutions/AIs are given the same answers for fairness
-    selected_words = [random_wordle_word() for _ in range(10)]
+    correct_output_words = [random_wordle_word() for _ in range(10)]
     
     # same principle as the fitness function in `create` and `load`
     def selection_fitness_func(solution, solution_idx):
         global possible_wordle_words, allowed_wordle_words
-        total_fitness = 0.0
+        fitness = 0.0
         
         set_neural_network_weights(model, solution)
         
         for j in range(10):
-            input_values = [-1.0] * 50
-            correct_output_values = selected_words[j]
+            input_values = [-1] * 50
             remaining_words = possible_wordle_words
-            
-            fitness = 0.0
-            invalid_words = 0
 
             for i in range(6):
                 # convert input values to tensor
                 input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
                 
                 # get AI output
-                output_tensor = model(input_tensor)[0]
-                output_values = list(np.floor(np.array(output_tensor) * 25.0))
+                output_value = int(model(input_tensor)[0][0] * (len(allowed_wordle_words) - 1))
+                output_word = allowed_wordle_words[output_value]
 
                 # mark the guess with wordle's grey, yellow, green colours
                 # see paper for their meanings
-                colours = colour(output_values, correct_output_values)
+                colours = colour(output_word, correct_output_words[j])
 
                 # add current guess to the inputs for the next guess
-                input_values[i*10:(i+1)*10] = output_values + colours
+                input_values[i*10:(i+1)*10] = [ord(l) - 97 for l in output_word] + colours
 
                 prev_remaining_words_len = len(remaining_words)
                 # calculate the possible remaining words
                 remaining_words = options_from_guess(
-                    remaining_words, colours, output_values)
-                
-                # if invalid word, reduce fitness
-                if tuple(output_values) not in allowed_wordle_words:
-                    invalid_words += 1
-                
-                # log2(0) returns undefined values, and the AI is supposed to avoid having no words left
-                if len(remaining_words) == 0:
-                    return 0.0 - invalid_words
+                    remaining_words, colours, output_word)
                 
                 # information
                 fitness += -log2(len(remaining_words) / prev_remaining_words_len)
                 
                 # if AI wins, break the loop
-                if tuple(output_values) == correct_output_values:
+                if output_word == correct_output_words[j]:
                     fitness += 1.0
                     break
-            
-            fitness -= invalid_words
-            total_fitness += fitness
-        
-        return total_fitness
+
+        return fitness
     
     ga_instance.fitness_func = selection_fitness_func
     return ga_instance.best_solution()[0]
@@ -152,59 +137,48 @@ def test():
     
     print("Testing started.")
 
-    def modified_fitness_func(correct_output_values: tuple):
+    def modified_fitness_func(correct_output_word: str):
         global possible_wordle_words, allowed_wordle_words
         
-        input_values = [-1.0] * 50
+        input_values = [-1] * 50
         remaining_words = possible_wordle_words
         
         fitness = 0.0
-        invalid_words = 0
 
         for i in range(6):
             # convert input values to tensor
             input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
             
             # get AI output
-            output_tensor = model(input_tensor)[0]
-            output_values = list(np.floor(np.array(output_tensor) * 25.0))
+            output_value = int(model(input_tensor)[0][0] * (len(allowed_wordle_words) - 1))
+            output_word = allowed_wordle_words[output_value]
 
             # mark the guess with wordle's grey, yellow, green colours
             # see paper for their meanings
-            colours = colour(output_values, correct_output_values)
+            colours = colour(output_word, correct_output_word)
 
             # add current guess to the inputs for the next guess
-            input_values[i*10:(i+1)*10] = output_values + colours
+            input_values[i*10:(i+1)*10] = [ord(l) - 97 for l in output_word] + colours
 
             prev_remaining_words_len = len(remaining_words)
             # calculate the possible remaining words
             remaining_words = options_from_guess(
-                remaining_words, colours, output_values)
-            
-            # if invalid word, reduce fitness
-            if tuple(output_values) not in allowed_wordle_words:
-                invalid_words += 1
-            
-            # log2(0) returns undefined values, and the AI is supposed to avoid having no words left
-            if len(remaining_words) == 0:
-                return (0.0 - invalid_words, 0)
+                remaining_words, colours, output_word)
             
             # information
             fitness += -log2(len(remaining_words) / prev_remaining_words_len)
             
             # if AI wins, break the loop
-            if tuple(output_values) == correct_output_values:
-                return (fitness - invalid_words + 1.0, i + 1)
-
-        fitness -= invalid_words
+            if output_word == correct_output_word:
+                return (fitness + 1.0, i + 1)
 
         return (fitness, 0) # 0 means did not finish
 
     fitness_values, finishes = [], [0 for _ in range(7)]
     for i, w in enumerate(possible_wordle_words):
-        if i % 10 == 0:
-            print(f"\nGame: {i} / {len(possible_wordle_words)}")
-            print(f"Percentage won: {1.0-finishes[0]/(i+1)*100.0:0.2f}")
+        if i % 10 == 0 and i > 0:
+            print(f"\nGames played: {i} / {len(possible_wordle_words)}")
+            print(f"Percentage won: {(1.0-finishes[0]/i)*100.0:0.2f}")
         fv, rf = modified_fitness_func(w)
         fitness_values.append(fv)
         finishes[rf] += 1
@@ -239,24 +213,27 @@ def play():
     print("\tYellow = Y")
     print("\tGreen  = G")
     print("Examples: RRGYR, RRRRR, RGGGY, GGGGG, YYYRR")
-    print("WARNING: The AI is *not* guaranteed to give you a valid guess.")
     
     while True:
-        input_values = [-1.0] * 50
+        input_values = [-1] * 50
         
         for i in range(6):
-            output_values = list(np.floor(model.predict(np.array([input_values]), verbose=0)[0] * 25.0))
-            output_word = "".join(chr(int(l) + 97) for l in output_values)
+            # convert input values to tensor
+            input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)    
+        
+            # get AI output
+            output_value = int(model(input_tensor)[0][0] * len(allowed_wordle_words))
+            output_word = allowed_wordle_words[output_value]
             
             print(f"\nGuess {i + 1}.")
             print(f"The AI {name}'s recommended guess:", output_word)
             if i < 5:
-                colour_strs = input(f"Colours Wordle gave the guess: ").lower()
-                while any(c not in "ryg" for c in colour_strs) or len(colour_strs) != 5:
+                colour_chars = input(f"Colours Wordle gave the guess: ").lower()
+                while any(c not in "ryg" for c in colour_chars) or len(colour_chars) != 5:
                     print("Invalid input. Please try again.")
-                    colour_strs = input(f"Colours Wordle gave the guess: ").lower()
-                colours = [ord(c) - 97 for c in colour_strs]
-                input_values[i*10:(i+1)*10] = output_values + colours
+                    colour_chars = input(f"Colours Wordle gave the guess: ").lower()
+                colours = [ord(c) - 97 for c in colour_chars]
+                input_values[i*10:(i+1)*10] = [ord(l) - 97 for l in output_word] + colours
         
         print("The game has ended.")
         
@@ -274,30 +251,27 @@ def plot():
     plt.xlabel("Generation", fontsize=14)
     plt.ylabel("Fitness", fontsize=14)
 
-    colour_values = "bgrcmykw"
+    colour_values = "rbgcmykw"
 
     print("Available AIs:", os.listdir("instances"))
     count = int(input("Number of AIs to plot: "))
-    while count > 4:
-        print("Number of AIs must be less than 5.")
+    while count > 8 or count < 1:
+        print("Number of AIs must be between 0 and 9.")
         count = int(input("Number of AIs to plot: "))
     for i in range(count):
         name = input(f"Name {i+1}: ")
         with open(join("instances", name, "training_data.txt"), "r") as file:
             jl = json.loads(file.read())
             fitness_scores: list = jl["fitness_scores"]
-            indices = range(len(fitness_scores))
 
-        for j, fs in enumerate(list(zip(*fitness_scores))):
-            label, tl_label = None, None
-            if j == 0:
-                label, tl_label = f"{name} score", f"{name} score trendline"
-            plt.scatter(indices, fs, color=colour_values[i], edgecolor="none", alpha=0.3, label=label)
+            label = f"{name} score"
+            other_indices, other_fitness_scores = zip(*[(i, x) for i, s in enumerate(fitness_scores) for x in s])
+            plt.scatter(other_indices, other_fitness_scores, color=colour_values[i], edgecolor="none", alpha=0.1, label=label)
 
             # trendline
-            z = np.polyfit(indices, [np.average(fs) for fs in fitness_scores], 1)
+            z = np.polyfit(other_indices, other_fitness_scores, 1)
             p = np.poly1d(z)
-            plt.plot(p(indices), linewidth=3, color=colour_values[i], label=tl_label)
+            plt.plot(p(range(len(fitness_scores))), linewidth=3, color=colour_values[i], label=f"{name} score trendline")
 
     plt.legend(title="Legend", title_fontproperties={"weight": "bold"})
 
@@ -314,35 +288,40 @@ def plot():
 
 
 if __name__ == "__main__":
-    print("Welcome.")
-    print("Select a mode to continue.")
-    print("For an explanation of all modes, type 'help'.")
-    print("Available modes: [help, train, play, test, plot, quit]")
-    mode = input("Mode: ")
-    while mode not in ["help", "train", "play", "test", "plot", "quit"]:
-        print("Invalid mode. Please try again.")
+    while True:
+        print("\nHome.")
+        print("Select a mode to continue.")
+        print("For an explanation of all modes, type 'help'.")
+        print("Available modes: [help, train, play, test, plot, quit]")
         mode = input("Mode: ")
+        while mode not in ["help", "train", "play", "test", "plot", "quit"]:
+            print("Invalid mode. Please try again.")
+            mode = input("Mode: ")
 
-    if mode == "help":
-        print("\nModes:")
-        print("help  - Show the modes' explanations as currently shown.")
-        print("train - Train an AI. Options are 'create' and 'load' for training a new AI and training a previously created one respectively.")
-        print("play  - Get AI guess recommendations for your Wordle game.")
-        print("test  - Test how well an AI performs on all possible Wordle answers.")
-        print("plot  - Plot the fitness scores one or more AIs in a graph.")
-        print("")
-        print("Terminology:")
-        print("'guess'             - A five-letter word used in Wordle by the player.")
-        print("'fitness score'     - A value used to rate how well an AI performs. The higher the better.")
-        print("'fitness function'  - The function used to calculate the fitness score.")
-        print("'generation'        - A stage in the development of an AI.")
-        print("'genetic algorithm' - How the AIs evolve.")
-        print("")
-    if mode == "train":
-        train()
-    if mode == "plot":
-        plot()
-    if mode == "test":
-        test()
-    if mode == "play":
-        play()
+        if mode == "help":
+            print("\nModes:")
+            print("help  - Show the modes' explanations as currently shown.")
+            print("train - Train an AI. Options are 'create' and 'load' for training a new AI and training a previously created one respectively.")
+            print("play  - Get AI guess recommendations for your Wordle game.")
+            print("test  - Test how well an AI performs on all possible Wordle answers.")
+            print("plot  - Plot the fitness scores one or more AIs in a graph.")
+            print("")
+            print("Terminology:")
+            print("'guess'             - A five-letter word used in Wordle by the player.")
+            print("'fitness score'     - A value used to rate how well an AI performs. The higher the better.")
+            print("'fitness function'  - The function used to calculate the fitness score.")
+            print("'generation'        - A stage in the development of an AI.")
+            print("'genetic algorithm' - How the AIs evolve.")
+        
+        if mode == "train":
+            train()
+        if mode == "play":
+            play()
+        if mode == "test":
+            test()
+        if mode == "plot":
+            plot()
+        if mode == "quit":
+            break
+        
+        os.system(f'title Command Prompt - py api.py')

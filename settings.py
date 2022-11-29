@@ -8,7 +8,7 @@ import json
 @dataclass
 class Settings:
     num_parents_mating: int = 4
-    parent_selection_type: str = "rank"
+    parent_selection_type: str = "sss"
     crossover_type: str = "scattered"
     mutation_type: str = "random"
     mutation_probability: int = 0.2

@@ -13,33 +13,32 @@ import json
 from matplotlib import pyplot as plt
 
 
-possible_wordle_words = [tuple((ord(l) - 97) for l in word.rstrip())
-                for word in open("possible_words.txt")]
+possible_wordle_words = [word.rstrip() for word in open("possible_words.txt")]
+allowed_wordle_words = [word.rstrip() for word in open("allowed_words.txt")]
 
 
-allowed_wordle_words = frozenset(tuple((ord(l) - 97) for l in word.rstrip()) for word in open("allowed_words.txt"))
-
-
-def random_wordle_word():
+def random_wordle_word(seed=0):
     global possible_wordle_words
-    random.seed()
+    random.seed(seed)
     return possible_wordle_words[random.randrange(len(possible_wordle_words))]
 
 
 num_generations = None
 generations_passed = 0
 fitness_scores_since_save = [[]]
-first_guesses_since_save = [[]]
+first_guesses_since_save = [set()]
 start_time = 0
 last_save_time = 0
 save_count = 0
 ai_name = None
-correct_output_values = [random_wordle_word() for _ in range(10)]
+correct_output_words = [random_wordle_word(0) for _ in range(10)]
 
 def on_start(ga_instance):
     global start_time, last_save_time
     start_time = time.time_ns()
     last_save_time = time.time_ns()
+    fitness_scores_since_save = [[]]
+    first_guesses_since_save = [set()]
 
 
 def format_secs(s):
@@ -52,7 +51,7 @@ def format_secs(s):
 
 
 def on_generation(ga_instance):
-    global save_count, last_save_time, fitness_scores_since_save, first_guesses_since_save, generations_passed, correct_output_values
+    global save_count, last_save_time, fitness_scores_since_save, first_guesses_since_save, generations_passed, correct_output_words
 
     generations_passed += 1
     time_taken = (time.time_ns() - start_time) / 1_000_000_000.0
@@ -67,10 +66,10 @@ def on_generation(ga_instance):
         save_ga(ga_instance, ai_name)
         last_save_time = time.time_ns()
 
-    correct_output_values = [random_wordle_word() for _ in range(10)]
+    correct_output_words = [random_wordle_word(generations_passed) for _ in range(10)]
 
     fitness_scores_since_save.append([])
-    first_guesses_since_save.append([])
+    first_guesses_since_save.append(set())
 
 
 # function that needs to be called before using model.predict
@@ -81,47 +80,44 @@ def set_neural_network_weights(model, solution):
     model.set_weights(solution_weights)
 
 
-# r,y,g mapped to 0.0, 0.5, 1.0
+# TODO: FIX
+# r,y,g mapped to 0, 1, 2
 def colour(word, solution):
     colours = [0, 0, 0, 0, 0]  # full gray default
 
-    for i, (l1, l2) in enumerate(zip(word, solution)):
-        if l1 == l2:
-            colours[i] = 2  # green
-        # special yellow rule: if number of l1 in solution is less than
-        # the number of l1 in `word` up until l1 then make it gray instead of yellow
-        elif l1 in solution and solution.count(l1) >= word[:i+1].count(l1):
-            colours[i] = 1  # yellow
+    for i, l, s in zip(range(5), word, solution):
+        if l == s:
+            colours[i] = 2 # green
+        # special yellow rule: if number of `l` in solution is less than
+        # the number of `l` in `word` up until `l` then make it gray instead of yellow
+        elif l in solution and solution.count(l) >= word[:i+1].count(l):
+            colours[i] = 1 # yellow
 
     return colours
 
 
-# fitness function based on greens and yellows, currently unused
-def coloured_fitness(predictions: list, data_outputs):
-    colours = colour(predictions, data_outputs)
-    return colours.count(2) + 0.5 * colours.count(1)
-
-
+# TODO: FIX
 # returns the valid options from a list of words that match a (colours, letters) pair
 def options_from_guess(possibilities: list, colours: list, guess: list):
-    grays = [(l, i)
-             for i, c, l in zip(range(5), colours, guess) if c == 0]
+    grays, greens = [], []
 
-    yellows = defaultdict(lambda: 0)
+    yellows = defaultdict(lambda: [])
     for i, c, l in zip(range(5), colours, guess):
-        if c == 1:
+        if c == 0:
+            grays.append((i, l))
+        elif c == 1:
             # makes sure the spot that's yellow can't be the guessed letter
-            grays.append((l, i))
-            yellows[l] += 1  # adds to the yellows-with-this-letter count
-
-    greens = [(l, i)
-              for i, c, l in zip(range(5), colours, guess) if c == 2]
+            grays.append((i, l))
+            # up until index `i` the number of yellows with the guessed letter in the solution >= the number in the guess
+            yellows[l].append(i)
+        elif c == 2:
+            greens.append((i, l))
 
     return [
-        x for x in possibilities
-        if all(x[i] != l for l, i in grays)
-        and all(x.count(l) == c for l, c in yellows.items())
-        and all(x[i] == l for l, i in greens)
+        w for w in possibilities
+        if all(w[i] != l for i, l in grays)
+        and all(w[i] == l for i, l in greens)
+        and all(w[:i+1].count(l) >= c for l, arr in yellows.items() for c, i in zip(range(1, len(arr)+1), arr))
     ]
 
 
@@ -139,8 +135,8 @@ def load_settings():
         chosen_settings = input(
             f"\nName of the file you wish to use: ")
         while chosen_settings not in available_settings:
-            chosen_settings = input(
-                "Invalid name. \nName of the file you wish to use: ")
+            print("Invalid name.")
+            chosen_settings = input("Name of the file you wish to use: ")
     print(f"'{chosen_settings}'", "settings selected.")
     with open(join("settings", chosen_settings), "r") as file:
         settings = Settings.from_json(json.loads(file.read()))
@@ -154,9 +150,12 @@ def save_ga(ga_instance: pygad.GA, name: str):
 
     print("\nSaving...")
     
-    length_of_column = len(fitness_scores_since_save[1]) # required cause pygad is wack
-    fitness_scores = copy.deepcopy([x[:length_of_column] for x in fitness_scores_since_save if len(x) != 0])
-    first_guesses = copy.deepcopy([x[:length_of_column] for x in first_guesses_since_save if len(x) != 0])
+    fitness_scores = copy.deepcopy(fitness_scores_since_save)
+    first_guesses = copy.deepcopy([list(x) for x in first_guesses_since_save]) # sets cannot be JSON serialized
+    if len(fitness_scores[-1]) == 0:
+        fitness_scores.pop()
+    if len(first_guesses[-1]) == 0:
+        first_guesses.pop()
     # initial value is time since last update, time before last update is added later
     time_trained = (time.time_ns() - last_save_time) / 1e9 % 300
 
@@ -214,35 +213,31 @@ def plot_fitness_training(fitness_scores,
         raise RuntimeError(
             f"The plot_fitness() (i.e. plot_result()) method can only be called after completing at least 1 generation but ({generations_completed}) is completed.")
 
-    indices = range(generations_completed)
-
     fig = plt.figure()
     
     plt.title(title, fontsize=font_size)
     plt.xlabel(xlabel, fontsize=font_size)
     plt.ylabel(ylabel, fontsize=font_size)
     
-    best_fitness_scores = [np.max(fs) for fs in fitness_scores]
+    best_fitness_scores = [np.max(fs) if len(fs) > 0 else -1e20 for fs in fitness_scores]
     
-    for j, fs in enumerate(list(zip(*fitness_scores))):
-        indices2, ffs = zip(*[(i, x) for i, x, b in zip(indices, fs, best_fitness_scores) if x != b])
-        label = None
-        if j == 0:
-            label = "all scores"
-        plt.scatter(indices2, ffs, color="r", edgecolor="none", alpha=0.3, label=label)
+    all_indices, all_fitness_scores = zip(*[(i, x) for i, s in enumerate(fitness_scores) for x in s])
     
-    plt.scatter(indices, best_fitness_scores, color="b", edgecolor="none", alpha=0.3, label="best scores")
-
+    other_indices, other_fitness_scores = zip(*[(i, x) for i, x in zip(all_indices, all_fitness_scores) if best_fitness_scores[i] != x])
+    plt.scatter(other_indices, other_fitness_scores, color="r", edgecolor="none", alpha=0.3, label="all scores")
+    
+    best_indices, best_fitness_scores = zip(*[(i, x) for i, x in enumerate(best_fitness_scores) if x != -1e20]);
+    plt.scatter(best_indices, best_fitness_scores, color="b", edgecolor="none", alpha=0.3, label="best scores")
 
     # trendline
     if trendline:
-        z = np.polyfit(indices, [np.average(fs) for fs in fitness_scores], 1)
+        z = np.polyfit(all_indices, all_fitness_scores, 1)
         p = np.poly1d(z)
-        plt.plot(p(indices), linewidth=linewidth, color="r", label="average score trendline")
+        plt.plot(p(range(len(fitness_scores))), linewidth=linewidth, color="r", label="average score trendline")
         
-        z = np.polyfit(indices, best_fitness_scores, 1)
+        z = np.polyfit(best_indices, best_fitness_scores, 1)
         p = np.poly1d(z)
-        plt.plot(p(indices), linewidth=linewidth, color="b", label="best score trendline")
+        plt.plot(p(range(len(fitness_scores))), linewidth=linewidth, color="b", label="best score trendline")
 
     if not save_dir is None:
         plt.savefig(fname=save_dir,
