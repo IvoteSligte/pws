@@ -80,7 +80,6 @@ def set_neural_network_weights(model, solution):
     model.set_weights(solution_weights)
 
 
-# TODO: FIX
 # r,y,g mapped to 0, 1, 2
 def colour(word, solution):
     colours = [0, 0, 0, 0, 0]  # full gray default
@@ -96,20 +95,19 @@ def colour(word, solution):
     return colours
 
 
-# TODO: FIX
 # returns the valid options from a list of words that match a (colours, letters) pair
-def options_from_guess(possibilities: list, colours: list, guess: list):
+def options_from_guess(possibilities: list[str], colours: list[int], guess: str):
     grays, greens = [], []
 
-    yellows = defaultdict(lambda: [])
+    yellows = defaultdict(lambda: 0)
     for i, c, l in zip(range(5), colours, guess):
         if c == 0:
             grays.append((i, l))
         elif c == 1:
             # makes sure the spot that's yellow can't be the guessed letter
             grays.append((i, l))
-            # up until index `i` the number of yellows with the guessed letter in the solution >= the number in the guess
-            yellows[l].append(i)
+            # number of yellows of a certain letter <= the amount of the letter in the solution
+            yellows[l] += 1
         elif c == 2:
             greens.append((i, l))
 
@@ -117,7 +115,7 @@ def options_from_guess(possibilities: list, colours: list, guess: list):
         w for w in possibilities
         if all(w[i] != l for i, l in grays)
         and all(w[i] == l for i, l in greens)
-        and all(w[:i+1].count(l) >= c for l, arr in yellows.items() for c, i in zip(range(1, len(arr)+1), arr))
+        and all(w.count(l) >= c for l, c in yellows.items())
     ]
 
 
@@ -245,3 +243,4 @@ def plot_fitness_training(fitness_scores,
     plt.show()
 
     return fig
+
