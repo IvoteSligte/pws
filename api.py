@@ -72,13 +72,15 @@ def select_best_solution(ga_instance: pygad.GA, model):
     
     # same principle as the fitness function in `create` and `load`
     def selection_fitness_func(solution, solution_idx):
-        global possible_wordle_words, allowed_wordle_words
+        global possible_wordle_words
+        global allowed_wordle_words
+        
         fitness = 0.0
         
         set_neural_network_weights(model, solution)
         
         for j in range(10):
-            input_values = [-1] * 50
+            input_values = [0] * 725
             remaining_words = possible_wordle_words
 
             for i in range(6):
@@ -86,15 +88,16 @@ def select_best_solution(ga_instance: pygad.GA, model):
                 input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
                 
                 # get AI output
-                output_value = int(model(input_tensor)[0][0] * (len(allowed_wordle_words) - 1))
-                output_word = allowed_wordle_words[output_value]
+                output_tensor = model(input_tensor)[0].numpy()
+                output_index = np.argmax(output_tensor)
+                output_word = allowed_wordle_words[output_index]
 
                 # mark the guess with wordle's grey, yellow, green colours
                 # see paper for their meanings
                 colours = colour(output_word, correct_output_words[j])
 
                 # add current guess to the inputs for the next guess
-                input_values[i*10:(i+1)*10] = [ord(l) - 97 for l in output_word] + colours
+                input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
 
                 prev_remaining_words_len = len(remaining_words)
                 # calculate the possible remaining words
@@ -138,9 +141,10 @@ def test():
     print("Testing started.")
 
     def modified_fitness_func(correct_output_word: str):
-        global possible_wordle_words, allowed_wordle_words
+        global possible_wordle_words
+        global allowed_wordle_words
         
-        input_values = [-1] * 50
+        input_values = [0] * 725
         remaining_words = possible_wordle_words
         
         fitness = 0.0
@@ -150,15 +154,16 @@ def test():
             input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
             
             # get AI output
-            output_value = int(model(input_tensor)[0][0] * (len(allowed_wordle_words) - 1))
-            output_word = allowed_wordle_words[output_value]
+            output_tensor = model(input_tensor)[0].numpy()
+            output_index = np.argmax(output_tensor)
+            output_word = allowed_wordle_words[output_index]
 
             # mark the guess with wordle's grey, yellow, green colours
             # see paper for their meanings
             colours = colour(output_word, correct_output_word)
 
             # add current guess to the inputs for the next guess
-            input_values[i*10:(i+1)*10] = [ord(l) - 97 for l in output_word] + colours
+            input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
 
             prev_remaining_words_len = len(remaining_words)
             # calculate the possible remaining words
@@ -215,15 +220,16 @@ def play():
     print("Examples: RRGYR, RRRRR, RGGGY, GGGGG, YYYRR")
     
     while True:
-        input_values = [-1] * 50
+        input_values = [0] * 725
         
         for i in range(6):
             # convert input values to tensor
             input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)    
         
             # get AI output
-            output_value = int(model(input_tensor)[0][0] * len(allowed_wordle_words))
-            output_word = allowed_wordle_words[output_value]
+            output_tensor = model(input_tensor)[0].numpy()
+            output_index = np.argmax(output_tensor)
+            output_word = allowed_wordle_words[output_index]
             
             print(f"\nGuess {i + 1}.")
             print(f"The AI {name}'s recommended guess:", output_word)
@@ -233,7 +239,7 @@ def play():
                     print("Invalid input. Please try again.")
                     colour_chars = input(f"Colours Wordle gave the guess: ").lower()
                 colours = [ord(c) - 97 for c in colour_chars]
-                input_values[i*10:(i+1)*10] = [ord(l) - 97 for l in output_word] + colours
+                input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
         
         print("The game has ended.")
         

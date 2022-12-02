@@ -37,8 +37,6 @@ def on_start(ga_instance):
     global start_time, last_save_time
     start_time = time.time_ns()
     last_save_time = time.time_ns()
-    fitness_scores_since_save = [[]]
-    first_guesses_since_save = [set()]
 
 
 def format_secs(s):
@@ -51,10 +49,15 @@ def format_secs(s):
 
 
 def on_generation(ga_instance):
-    global save_count, last_save_time, fitness_scores_since_save, first_guesses_since_save, generations_passed, correct_output_words
+    global save_count
+    global last_save_time
+    global fitness_scores_since_save
+    global first_guesses_since_save
+    global generations_passed
+    global correct_output_words
 
     generations_passed += 1
-    time_taken = (time.time_ns() - start_time) / 1_000_000_000.0
+    time_taken = (time.time_ns() - start_time) / 1e9
     print(f"\nGeneration: {generations_passed} / {num_generations}")
     print("Time taken:", format_secs(time_taken))
     print("Estimated time left:", format_secs(time_taken /
@@ -63,8 +66,8 @@ def on_generation(ga_instance):
     # auto saves every 5 mins
     if time.time_ns() - last_save_time > 300e9:
         save_count += 1
-        save_ga(ga_instance, ai_name)
         last_save_time = time.time_ns()
+        save_ga(ga_instance, ai_name)
 
     correct_output_words = [random_wordle_word(generations_passed) for _ in range(10)]
 
@@ -78,6 +81,16 @@ def set_neural_network_weights(model, solution):
     solution_weights = pygad.kerasga.model_weights_as_matrix(model=model,
                                                              weights_vector=solution)
     model.set_weights(solution_weights)
+
+
+# returns a list of boolean integers representing the binary form of a word
+def word_to_binary(word):
+    return np.array([[0] * (ord(l) - 97) + [1] + [0] * (25 - (ord(l) - 97)) for l in word]).flatten().tolist()
+
+
+# returns a list of boolean integers representing the binary form of a set of RYG colours
+def colours_to_binary(colours):
+    return np.array([[0] * c + [1] + [0] * (2 - c) for c in colours]).flatten().tolist()
 
 
 # r,y,g mapped to 0, 1, 2
@@ -110,7 +123,7 @@ def options_from_guess(possibilities: list[str], colours: list[int], guess: str)
             yellows[l] += 1
         elif c == 2:
             greens.append((i, l))
-
+    
     return [
         w for w in possibilities
         if all(w[i] != l for i, l in grays)
@@ -132,9 +145,6 @@ def load_settings():
         print("Available files: ", available_settings)
         chosen_settings = input(
             f"\nName of the file you wish to use: ")
-        while chosen_settings not in available_settings:
-            print("Invalid name.")
-            chosen_settings = input("Name of the file you wish to use: ")
     print(f"'{chosen_settings}'", "settings selected.")
     with open(join("settings", chosen_settings), "r") as file:
         settings = Settings.from_json(json.loads(file.read()))
@@ -217,25 +227,27 @@ def plot_fitness_training(fitness_scores,
     plt.xlabel(xlabel, fontsize=font_size)
     plt.ylabel(ylabel, fontsize=font_size)
     
-    best_fitness_scores = [np.max(fs) if len(fs) > 0 else -1e20 for fs in fitness_scores]
+    best_fitness_scores_raw = [np.max(fs) if len(fs) > 0 else -1e20 for fs in fitness_scores]
     
     all_indices, all_fitness_scores = zip(*[(i, x) for i, s in enumerate(fitness_scores) for x in s])
     
-    other_indices, other_fitness_scores = zip(*[(i, x) for i, x in zip(all_indices, all_fitness_scores) if best_fitness_scores[i] != x])
+    other_indices, other_fitness_scores = zip(*[(i, x) for i, x in zip(all_indices, all_fitness_scores) if best_fitness_scores_raw[i] != x])
     plt.scatter(other_indices, other_fitness_scores, color="r", edgecolor="none", alpha=0.3, label="all scores")
     
-    best_indices, best_fitness_scores = zip(*[(i, x) for i, x in enumerate(best_fitness_scores) if x != -1e20]);
-    plt.scatter(best_indices, best_fitness_scores, color="b", edgecolor="none", alpha=0.3, label="best scores")
+    best_indices, best_fitness_scores_raw = zip(*[(i, x) for i, x in enumerate(best_fitness_scores_raw) if x != -1e20]);
+    plt.scatter(best_indices, best_fitness_scores_raw, color="b", edgecolor="none", alpha=0.3, label="best scores")
 
     # trendline
     if trendline:
         z = np.polyfit(all_indices, all_fitness_scores, 1)
         p = np.poly1d(z)
-        plt.plot(p(range(len(fitness_scores))), linewidth=linewidth, color="r", label="average score trendline")
+        plt.plot(p(range(len(fitness_scores))), linewidth=linewidth, color="r", label="all scores trendline")
         
-        z = np.polyfit(best_indices, best_fitness_scores, 1)
+        z = np.polyfit(best_indices, best_fitness_scores_raw, 1)
         p = np.poly1d(z)
-        plt.plot(p(range(len(fitness_scores))), linewidth=linewidth, color="b", label="best score trendline")
+        plt.plot(p(range(len(fitness_scores))), linewidth=linewidth, color="b", label="best scores trendline")
+
+    plt.legend(title="Legend", title_fontproperties={"weight": "bold"})
 
     if not save_dir is None:
         plt.savefig(fname=save_dir,
@@ -243,4 +255,3 @@ def plot_fitness_training(fitness_scores,
     plt.show()
 
     return fig
-
