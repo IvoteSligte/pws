@@ -109,7 +109,7 @@ def select_best_solution(ga_instance: pygad.GA, model):
                 
                 # if AI wins, break the loop
                 if output_word == correct_output_words[j]:
-                    fitness += 1.0
+                    fitness += 10.0
                     break
 
         return fitness
@@ -175,7 +175,7 @@ def test():
             
             # if AI wins, break the loop
             if output_word == correct_output_word:
-                return (fitness + 1.0, i + 1)
+                return (fitness + 10.0, i + 1)
 
         return (fitness, 0) # 0 means did not finish
 

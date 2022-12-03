@@ -50,7 +50,7 @@ def fitness_func(solution, solution_idx):
 
             # if AI wins, break the loop
             if output_word == correct_output_words[j]:
-                fitness += 1.0
+                fitness += 10.0
                 break
             
             if i == 0 and j == 0: # store training data
@@ -59,7 +59,7 @@ def fitness_func(solution, solution_idx):
     # save training data
     fitness_scores_since_save[-1].append(fitness)
 
-    return fitness
+    return fitness / 10.0
 
 
 def create(num_generations):
