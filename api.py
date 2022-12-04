@@ -44,17 +44,17 @@ def plot_finishes(finishes, save_dir):
 
 
 def plot_fitness(fitness_scores, save_dir=None):
-    generations_completed = len(fitness_scores)
+    games_completed = len(fitness_scores)
 
-    if generations_completed < 1:
+    if games_completed < 1:
         raise RuntimeError(
-            f"The plot_fitness() (i.e. plot_result()) method can only be called after completing at least 1 generation but ({generations_completed}) is completed.")
+            f"The plot_fitness() (i.e. plot_result()) method can only be called after completing at least 1 generation but ({games_completed}) is completed.")
     
-    plt.title("Generation vs. Fitness", fontsize=14)
-    plt.xlabel("Generation", fontsize=14)
+    plt.title("Index vs. Fitness", fontsize=14)
+    plt.xlabel("Index", fontsize=14)
     plt.ylabel("Fitness", fontsize=14)
 
-    indices = range(generations_completed)
+    indices = range(games_completed)
     plt.scatter(indices, fitness_scores, color="r", edgecolor="none", alpha=0.3)
 
     if not save_dir is None:
@@ -121,7 +121,7 @@ def select_best_solution(ga_instance: pygad.GA, model):
 def test():
     print("Testing selected.")
     
-    print("Testing will take several minutes and cannot be stopped once started.")
+    print("Testing may take several minutes and cannot be stopped once started.")
     choice = input("Continue? [Y/N]: ")
     while choice not in ["Y", "N"]:
         choice = input("Continue? [Y/N]: ")

@@ -17,9 +17,8 @@ possible_wordle_words = [word.rstrip() for word in open("possible_words.txt")]
 allowed_wordle_words = [word.rstrip() for word in open("allowed_words.txt")]
 
 
-def random_wordle_word(seed=0):
+def random_wordle_word():
     global possible_wordle_words
-    random.seed(seed)
     return possible_wordle_words[random.randrange(len(possible_wordle_words))]
 
 
@@ -31,7 +30,7 @@ start_time = 0
 last_save_time = 0
 save_count = 0
 ai_name = None
-correct_output_words = [random_wordle_word(0) for _ in range(10)]
+correct_output_words = [random_wordle_word() for _ in range(100)]
 
 def on_start(ga_instance):
     global start_time, last_save_time
@@ -69,7 +68,7 @@ def on_generation(ga_instance):
         last_save_time = time.time_ns()
         save_ga(ga_instance, ai_name)
 
-    correct_output_words = [random_wordle_word(generations_passed) for _ in range(10)]
+    correct_output_words = [random_wordle_word() for _ in range(100)]
 
     fitness_scores_since_save.append([])
     first_guesses_since_save.append(set())

@@ -20,7 +20,7 @@ def fitness_func(solution, solution_idx):
 
     set_neural_network_weights(model, solution)
 
-    for j in range(10):
+    for j in range(10): # TODO: check for the best possible value for this
         remaining_words = possible_wordle_words
         input_values = [0] * 725
         
@@ -75,16 +75,17 @@ def load(num_generations):
     
     ga_instance: pygad.GA = pygad.load(join("instances", name, "algorithm"))
     
-    change_settings = None
-    while change_settings not in ["Y", "N"]:
-        change_settings = input("Change training settings? [Y/N]: ").capitalize()
+    # # buggy, training does not work properly after changing settings
+    # change_settings = None
+    # while change_settings not in ["Y", "N"]:
+    #     change_settings = input("Change training settings? [Y/N]: ").capitalize()
     
-    if change_settings == "Y":
-        settings = load_settings()
-        settings.update_ga(ga_instance)
+    # if change_settings == "Y":
+    #     settings = load_settings()
+    #     settings.update_ga(ga_instance)
         
-        with open(join("instances", name, "settings.txt"), "w") as file:
-            file.write(settings.to_json())
+    #     with open(join("instances", name, "settings.txt"), "w") as file:
+    #         file.write(settings.to_json())
     
     ga_instance.num_generations = num_generations
     ga_instance.fitness_func = fitness_func

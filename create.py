@@ -69,17 +69,17 @@ def create(num_generations):
 
     num_solutions = 8  # number of AI instances in a generation
     
-    num_layers = input("Number of hidden layers (default = 10): ")
+    num_layers = input("Number of hidden layers (default = 3): ")
     if num_layers == "":
-        num_layers = 10
+        num_layers = 3
     else:
         num_layers = int(num_layers)
     
-    nodes_per_layer = input("Number of nodes per hidden layer (default = 725): ")
+    nodes_per_layer = input("Number of nodes per hidden layer (default = 25): ")
     if nodes_per_layer == "":
-        nodes_per_layer = 725
+        nodes_per_layer = 25
     else:
-        nodes_per_layer = int(num_layers)
+        nodes_per_layer = int(nodes_per_layer)
     
     keep_parents = -1
     keep_elitism = 1
