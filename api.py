@@ -23,6 +23,8 @@ def train():
         if (training_type == "create"):
             create(generations)
         elif (training_type == "load"):
+            print("Loading is highly unstable and may ruin the AI.")
+            print("Creating a copy of the AI's folder is recommended. (instances/[name])")
             load(generations)
     else:
         print("The number of training generations needs to be greater than one.")
@@ -67,21 +69,26 @@ def plot_fitness(fitness_scores, save_dir=None):
 # during training there are N AIs trained at a time,
 # but for testing and playing only one is required so the best one is used
 def select_best_solution(ga_instance: pygad.GA, model):
-    # all solutions/AIs are given the same answers for fairness
-    correct_output_words = [random_wordle_word() for _ in range(10)]
+    solution_fitnesses_and_finishes = defaultdict(lambda: ([], []))
     
     # same principle as the fitness function in `create` and `load`
     def selection_fitness_func(solution, solution_idx):
         global possible_wordle_words
         global allowed_wordle_words
         
-        fitness = 0.0
+        all_fitness_scores = []
+        all_finishes = [0 for _ in range(7)]
         
         set_neural_network_weights(model, solution)
         
-        for j in range(10):
+        for w, correct_output_word in enumerate(possible_wordle_words):
+            print(f"Current cycle progress: {w} / {len(possible_wordle_words)}")
+            
             input_values = [0] * 725
             remaining_words = possible_wordle_words
+            
+            fitness = 0.0
+            finish = 0
 
             for i in range(6):
                 # convert input values to tensor
@@ -94,7 +101,7 @@ def select_best_solution(ga_instance: pygad.GA, model):
 
                 # mark the guess with wordle's grey, yellow, green colours
                 # see paper for their meanings
-                colours = colour(output_word, correct_output_words[j])
+                colours = colour(output_word, correct_output_word)
 
                 # add current guess to the inputs for the next guess
                 input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
@@ -108,14 +115,21 @@ def select_best_solution(ga_instance: pygad.GA, model):
                 fitness += -log2(len(remaining_words) / prev_remaining_words_len)
                 
                 # if AI wins, break the loop
-                if output_word == correct_output_words[j]:
+                if output_word == correct_output_word:
                     fitness += 10.0
+                    finish = i + 1
                     break
+            
+            all_fitness_scores.append(fitness)
+            all_finishes[finish] += 1
 
-        return fitness
+        solution_fitnesses_and_finishes[solution_idx] = (all_fitness_scores, all_finishes)
+        
+        return sum(all_fitness_scores)
     
     ga_instance.fitness_func = selection_fitness_func
-    return ga_instance.best_solution()[0]
+    best_sol = ga_instance.best_solution()
+    return (best_sol[0], solution_fitnesses_and_finishes[best_sol[2]])
 
 
 def test():
@@ -130,67 +144,20 @@ def test():
     
     print("Choose one of the following AIs for testing.")
     print("Available AIs:", os.listdir("instances"))
-    name = input("AI instance to test: ")
+    name = input("AI to test: ")
     model: tf.keras.Model = tf.keras.models.load_model(
         join("instances", name, "model"))
     ga_instance: pygad.GA = pygad.load(join("instances", name, "algorithm"))
     
-    solution = select_best_solution(ga_instance, model)
-    set_neural_network_weights(model, solution)
-    
     print("Testing started.")
+    
+    best_solution_fitnesses_and_finishes = select_best_solution(ga_instance, model)[1]
+    
+    print("Testing finished.")
 
-    def modified_fitness_func(correct_output_word: str):
-        global possible_wordle_words
-        global allowed_wordle_words
-        
-        input_values = [0] * 725
-        remaining_words = possible_wordle_words
-        
-        fitness = 0.0
-
-        for i in range(6):
-            # convert input values to tensor
-            input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
-            
-            # get AI output
-            output_tensor = model(input_tensor)[0].numpy()
-            output_index = np.argmax(output_tensor)
-            output_word = allowed_wordle_words[output_index]
-
-            # mark the guess with wordle's grey, yellow, green colours
-            # see paper for their meanings
-            colours = colour(output_word, correct_output_word)
-
-            # add current guess to the inputs for the next guess
-            input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
-
-            prev_remaining_words_len = len(remaining_words)
-            # calculate the possible remaining words
-            remaining_words = options_from_guess(
-                remaining_words, colours, output_word)
-            
-            # information
-            fitness += -log2(len(remaining_words) / prev_remaining_words_len)
-            
-            # if AI wins, break the loop
-            if output_word == correct_output_word:
-                return (fitness + 10.0, i + 1)
-
-        return (fitness, 0) # 0 means did not finish
-
-    fitness_values, finishes = [], [0 for _ in range(7)]
-    for i, w in enumerate(possible_wordle_words):
-        if i % 10 == 0 and i > 0:
-            print(f"\nGames played: {i} / {len(possible_wordle_words)}")
-            print(f"Percentage won: {(1.0-finishes[0]/i)*100.0:0.2f}")
-        fv, rf = modified_fitness_func(w)
-        fitness_values.append(fv)
-        finishes[rf] += 1
-
-    plot_fitness(fitness_values, save_dir=join(
+    plot_fitness(best_solution_fitnesses_and_finishes[0], save_dir=join(
         "instances", name, "testing_fitness"))
-    plot_finishes(finishes, save_dir=join(
+    plot_finishes(best_solution_fitnesses_and_finishes[1], save_dir=join(
         "instances", name, "testing_finishes"))
 
 
@@ -205,9 +172,9 @@ def play():
     ga_instance: pygad.GA = pygad.load(join("instances", name, "algorithm"))
     
     print("Initializing... this may take a minute.")
-    solution = select_best_solution(ga_instance, model)
+    solution, (_, finishes) = select_best_solution(ga_instance, model)[0]
     set_neural_network_weights(model, solution)
-    print("Finished initializing.")
+    print(f"Finished initializing. Chosen AI has a win rate of {(1.0 - len(possible_wordle_words) / (len(finishes[0]))) * 100.0 :.2f}%")
 
     print("How it works.")
     print("The Wordle AI will recommend guesses, which you need to use in your Wordle game.")

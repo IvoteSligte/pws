@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Tuple
 import pygad
 import json
 
@@ -10,8 +9,7 @@ class Settings:
     num_parents_mating: int = 4
     parent_selection_type: str = "sss"
     crossover_type: str = "scattered"
-    mutation_type: str = "random"
-    mutation_probability: int = 0.2
+    mutation_percent_genes: int = 0.1
     random_mutation_min_val: int = -1.0
     random_mutation_max_val: int = 1.0
 
@@ -27,18 +25,17 @@ class Settings:
             crossover_type=self.crossover_type,
             keep_parents=keep_parents,
             keep_elitism=keep_elitism,
-            mutation_type=self.mutation_type,
-            mutation_probability=self.mutation_probability,
+            mutation_percent_genes=self.mutation_percent_genes,
             random_mutation_min_val=self.random_mutation_min_val,
-            random_mutation_max_val=self.random_mutation_max_val
+            random_mutation_max_val=self.random_mutation_max_val,
+            mutation_type="random",
         )
 
     def update_ga(self, ga: pygad.GA):
         ga.num_parents_mating = self.num_parents_mating
         ga.parent_selection_type = self.parent_selection_type
         ga.crossover_type = self.crossover_type
-        ga.mutation_type = self.mutation_type
-        ga.mutation_probability = self.mutation_probability
+        ga.mutation_percent_genes = self.mutation_percent_genes
         ga.random_mutation_min_val = self.random_mutation_min_val
         ga.random_mutation_max_val = self.random_mutation_max_val
 
@@ -50,8 +47,7 @@ class Settings:
         s.num_parents_mating = d["num_parents_mating"]
         s.parent_selection_type = d["parent_selection_type"]
         s.crossover_type = d["crossover_type"]
-        s.mutation_type = d["mutation_type"]
-        s.mutation_probability = d["mutation_probability"]
+        s.mutation_percent_genes = d["mutation_percent_genes"]
         s.random_mutation_min_val = d["random_mutation_min_val"]
         s.random_mutation_max_val = d["random_mutation_max_val"]
         return s

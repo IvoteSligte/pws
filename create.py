@@ -75,9 +75,9 @@ def create(num_generations):
     else:
         num_layers = int(num_layers)
     
-    nodes_per_layer = input("Number of nodes per hidden layer (default = 25): ")
+    nodes_per_layer = input("Number of nodes per hidden layer (default = 725): ")
     if nodes_per_layer == "":
-        nodes_per_layer = 25
+        nodes_per_layer = 725
     else:
         nodes_per_layer = int(nodes_per_layer)
     
@@ -87,7 +87,7 @@ def create(num_generations):
     # Keras model, stores layers/nodes
     layers = [tf.keras.Input(shape=725)]
     for _ in range(num_layers):
-        layers.append(tf.keras.layers.Dense(nodes_per_layer, activation="sigmoid")) # TODO:try ReLU
+        layers.append(tf.keras.layers.Dense(nodes_per_layer, activation="relu"))
     layers.append(tf.keras.layers.Dense(len(allowed_wordle_words), activation="softmax"))
     model = tf.keras.models.Sequential(layers)
     model.call = tf.function(model.call)
@@ -114,6 +114,10 @@ def create(num_generations):
         keep_parents=keep_parents,
         keep_elitism=keep_elitism,
     )
+    general.ga = ga_instance
+    # pygad provides a 10x slower function for random mutation, so it's overwritten
+    # not recommended to change this, it will break things
+    ga_instance.mutation = mutation_randomly
 
     name = input("AI name: ")
     while os.path.exists(join("instances", name)):
@@ -135,8 +139,9 @@ def create(num_generations):
     
     with open(join("instances", name, "settings.txt"), "w") as file:
         file.write(settings.to_json())
-
+    
     ga_instance.run()
+    
     fitness_scores = save_ga(ga_instance, name)
     plot_fitness_training(fitness_scores, save_dir=join(
         "instances", name, "fitness"))

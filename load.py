@@ -91,6 +91,7 @@ def load(num_generations):
     ga_instance.fitness_func = fitness_func
     general.num_generations = num_generations
     general.ai_name = name
+    general.ga = ga_instance
     os.system(f'title Command Prompt - py api.py - {name}') # set window title
 
     ga_instance.run()

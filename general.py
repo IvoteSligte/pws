@@ -254,3 +254,31 @@ def plot_fitness_training(fitness_scores,
     plt.show()
 
     return fig
+
+
+ga: pygad.GA = None
+def mutation_randomly(offspring):
+        global ga
+        
+        """
+        Applies the random mutation the mutation probability. For each gene, if its probability is <= that mutation probability, then it will be mutated randomly.
+        It accepts a single parameter:
+            -offspring: The offspring to mutate.
+        It returns an array of the mutated offspring.
+        """
+
+        # Random mutation changes one or more genes in each offspring randomly.
+        for offspring_idx in range(offspring.shape[0]):
+            mutation_indices = np.array(random.sample(range(0, ga.num_genes), ga.mutation_num_genes))
+            # Generating random values.
+            random_values = np.random.uniform(low=ga.random_mutation_min_val, 
+                                                    high=ga.random_mutation_max_val, 
+                                                    size=len(mutation_indices))
+            
+            # If the mutation_by_replacement attribute is False, then the random value is added to the gene value.
+            if not ga.mutation_by_replacement:
+                random_values += offspring[offspring_idx, mutation_indices]
+            
+            offspring[offspring_idx, mutation_indices] = random_values
+
+        return offspring
