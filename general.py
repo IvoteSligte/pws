@@ -187,6 +187,7 @@ def save_ga(ga_instance: pygad.GA, name: str):
     return fitness_scores
 
 
+# modified pygad function
 # plots fitness values in a scatter plot with trendlines
 # WARNING: fitness_scores not being a two-dimensional array will result in abstract errors
 def plot_fitness_training(fitness_scores,
@@ -257,6 +258,7 @@ def plot_fitness_training(fitness_scores,
 
 
 ga: pygad.GA = None
+# modified pygad function
 def mutation_randomly(offspring):
         global ga
         

@@ -1,6 +1,7 @@
 __pycache__
 .vscode
 instances
+outdated_instances
 figures
 settings
 pws_rust/target

@@ -10,17 +10,16 @@ model = tf.keras.models.Sequential()
 
 def fitness_func(solution, solution_idx):
     global model
-    global correct_output_words
     global possible_wordle_words
     global allowed_wordle_words
     global first_guesses_since_save
     global fitness_scores_since_save
-
+    
     fitness = 0.0
 
     set_neural_network_weights(model, solution)
 
-    for j in range(10): # TODO: check for the best possible value for this
+    for j, correct_output_word in enumerate(possible_wordle_words):
         remaining_words = possible_wordle_words
         input_values = [0] * 725
         
@@ -29,13 +28,11 @@ def fitness_func(solution, solution_idx):
             input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
             
             # get AI output
-            output_tensor = model(input_tensor)[0].numpy()
-            output_index = np.argmax(output_tensor)
-            output_word = allowed_wordle_words[output_index]
+            output_word = allowed_wordle_words[np.argmax(model(input_tensor)[0].numpy())]
             
             # mark the guess with wordle's grey, yellow, green colours
             # see paper for their meanings
-            colours = colour(output_word, correct_output_words[j])
+            colours = colour(output_word, correct_output_word)
 
             # add current guess to the inputs for the next guess
             input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
@@ -45,21 +42,21 @@ def fitness_func(solution, solution_idx):
             remaining_words = options_from_guess(
                 remaining_words, colours, output_word)
 
-            # information
-            fitness += -log2(len(remaining_words) / prev_remaining_words_len)
-
             # if AI wins, break the loop
-            if output_word == correct_output_words[j]:
+            if output_word == correct_output_word:
                 fitness += 10.0
                 break
 
             if i == 0 and j == 0: # store training data
                 first_guesses_since_save[-1].add(output_word)
 
+        # information
+        fitness += -log2(len(remaining_words) / prev_remaining_words_len)
+
     # save training data
     fitness_scores_since_save[-1].append(fitness)
 
-    return fitness / 10.0
+    return fitness
 
 
 def load(num_generations):
