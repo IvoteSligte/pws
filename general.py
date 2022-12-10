@@ -30,7 +30,6 @@ start_time = 0
 last_save_time = 0
 save_count = 0
 ai_name = None
-correct_output_words = [random_wordle_word() for _ in range(100)]
 
 def on_start(ga_instance):
     global start_time, last_save_time
@@ -53,7 +52,6 @@ def on_generation(ga_instance):
     global fitness_scores_since_save
     global first_guesses_since_save
     global generations_passed
-    global correct_output_words
 
     generations_passed += 1
     time_taken = (time.time_ns() - start_time) / 1e9
@@ -68,9 +66,7 @@ def on_generation(ga_instance):
         last_save_time = time.time_ns()
         save_ga(ga_instance, ai_name)
 
-    correct_output_words = [random_wordle_word() for _ in range(100)]
-
-    fitness_scores_since_save.append([])
+    fitness_scores_since_save.append([np.max(fitness_scores_since_save[-1])])
     first_guesses_since_save.append(set())
 
 
