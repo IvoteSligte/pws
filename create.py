@@ -1,67 +1,25 @@
 from general import *
-from math import log2
 import general
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 
 
-model = tf.keras.models.Sequential()
-
-
 def fitness_func(solution, solution_idx):
-    global model
     global possible_wordle_words
     global allowed_wordle_words
     global first_guesses_since_save
-    global fitness_scores_since_save
+
+    set_neural_network_weights(general.model, solution)
     
-    fitness = 0.0
-
-    set_neural_network_weights(model, solution)
-
-    for j, correct_output_word in enumerate(possible_wordle_words):
-        remaining_words = possible_wordle_words
-        input_values = [0] * 725
-        
-        for i in range(6):
-            # convert input values to tensor
-            input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
-            
-            # get AI output
-            output_word = allowed_wordle_words[np.argmax(model(input_tensor)[0].numpy())]
-            
-            # mark the guess with wordle's grey, yellow, green colours
-            # see paper for their meanings
-            colours = colour(output_word, correct_output_word)
-
-            # add current guess to the inputs for the next guess
-            input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
-
-            prev_remaining_words_len = len(remaining_words)
-            # calculate the possible remaining words
-            remaining_words = options_from_guess(
-                remaining_words, colours, output_word)
-
-            # if AI wins, break the loop
-            if output_word == correct_output_word:
-                fitness += 10.0
-                break
-            
-            if i == 0 and j == 0: # store training data
-                first_guesses_since_save[-1].add(output_word)
-
-        # information
-        fitness += -log2(len(remaining_words) / prev_remaining_words_len)
-
-    # save training data
-    fitness_scores_since_save[-1].append(fitness)
-
-    return fitness
+    # calculate first guess and add it to the training data
+    input_tensor = tf.convert_to_tensor(np.array([[0] * 725]), dtype=tf.float32)
+    output_word = allowed_wordle_words[np.argmax(general.model(input_tensor)[0].numpy())]
+    first_guesses_since_save[-1].add("".join(chr(l) for l in output_word))
+    
+    return sum(map(fitness_func_core, possible_wordle_words)) + max_fitness_per_word * possible_wordle_words.size
 
 
 def create(num_generations):
-    global model
-
     general.num_generations = num_generations
 
     num_solutions = 8  # number of AI instances in a generation
@@ -86,10 +44,11 @@ def create(num_generations):
     for _ in range(num_layers):
         layers.append(tf.keras.layers.Dense(nodes_per_layer, activation="relu"))
     layers.append(tf.keras.layers.Dense(len(allowed_wordle_words), activation="softmax"))
-    model = tf.keras.models.Sequential(layers)
-    model.call = tf.function(model.call)
+                  
+    general.model = tf.keras.models.Sequential(layers)
+    general.model.call = tf.function(general.model.call)
 
-    keras_ga = pygad.kerasga.KerasGA(model=model, num_solutions=num_solutions)
+    keras_ga = pygad.kerasga.KerasGA(model=general.model, num_solutions=num_solutions)
 
     if len(tf.config.list_physical_devices('GPU')) == 0:
         print("\nNo GPUs detected. Continuing on CPU.")
@@ -107,6 +66,7 @@ def create(num_generations):
         initial_population=initial_population,
         fitness_func=fitness_func,
         on_start=on_start,
+        on_fitness=on_fitness,
         on_generation=on_generation,
         keep_parents=keep_parents,
         keep_elitism=keep_elitism,
@@ -114,7 +74,7 @@ def create(num_generations):
     general.ga = ga_instance
     # pygad provides a 10x slower function for random mutation, so it's overwritten
     # not recommended to change this, it will break things
-    ga_instance.mutation = mutation_randomly
+    ga_instance.mutation = mutation_randomly_optimized
 
     name = input("AI name: ")
     while os.path.exists(join("instances", name)):
@@ -123,7 +83,7 @@ def create(num_generations):
     general.ai_name = name
     os.system(f'title Command Prompt - py api.py - {name}') # set window title
 
-    model.save(join("instances", name, "model"))
+    general.model.save(join("instances", name, "model"))
     with open(join("instances", name, "creation_data.txt"), "w") as file:
         jd = json.dumps({
             "layers": num_layers,
@@ -137,6 +97,7 @@ def create(num_generations):
     with open(join("instances", name, "settings.txt"), "w") as file:
         file.write(settings.to_json())
     
+    print("Training started.")
     ga_instance.run()
     
     fitness_scores = save_ga(ga_instance, name)

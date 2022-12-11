@@ -1,11 +1,13 @@
 from collections import defaultdict
 import copy
-from math import floor
+from math import floor, log2
 import time
 import pygad
 import pygad.kerasga
 import os
 from os.path import join
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+import tensorflow as tf
 from settings import Settings
 import numpy as np
 import random
@@ -13,18 +15,21 @@ import json
 from matplotlib import pyplot as plt
 
 
-possible_wordle_words = [word.rstrip() for word in open("possible_words.txt")]
-allowed_wordle_words = [word.rstrip() for word in open("allowed_words.txt")]
+possible_wordle_words = np.array([np.array([ord(l) for l in word.rstrip()]) for word in open("possible_words.txt")], dtype=np.int8)
+allowed_wordle_words = np.array([np.array([ord(l) for l in word.rstrip()]) for word in open("allowed_words.txt")], dtype=np.int8)
 
 
 def random_wordle_word():
     global possible_wordle_words
-    return possible_wordle_words[random.randrange(len(possible_wordle_words))]
+    return np.random.choice(possible_wordle_words, size=1)
 
 
+max_fitness_per_word = -log2(possible_wordle_words.size)
+
+model: tf.keras.models.Sequential = None
 num_generations = None
 generations_passed = 0
-fitness_scores_since_save = [[]]
+fitness_scores_since_save = []
 first_guesses_since_save = [set()]
 start_time = 0
 last_save_time = 0
@@ -46,10 +51,14 @@ def format_secs(s):
     return f"{h}:{m}:{s}"
 
 
+def on_fitness(ga_instance, fitness_scores):
+    global fitness_scores_since_save
+    fitness_scores_since_save.append(list(fitness_scores))
+
+
 def on_generation(ga_instance):
     global save_count
     global last_save_time
-    global fitness_scores_since_save
     global first_guesses_since_save
     global generations_passed
 
@@ -66,8 +75,40 @@ def on_generation(ga_instance):
         last_save_time = time.time_ns()
         save_ga(ga_instance, ai_name)
 
-    fitness_scores_since_save.append([np.max(fitness_scores_since_save[-1])])
     first_guesses_since_save.append(set())
+
+
+def fitness_func_core(correct_output_word):
+    global model
+    global possible_wordle_words
+    global allowed_wordle_words
+    
+    remaining_words = possible_wordle_words.copy()
+    input_values = np.array([])
+    
+    for _ in range(6):
+        # convert input values to tensor
+        input_tensor = tf.convert_to_tensor([np.pad(input_values, (0, 725-input_values.size), 'constant')])
+        
+        # get AI output
+        output_word = allowed_wordle_words[np.argmax(model(input_tensor)[0].numpy())]
+        
+        # if AI wins, break the loop
+        if np.array_equal(output_word, correct_output_word):
+            return 10.0
+        
+        # mark the guess with wordle's grey, yellow, green colours
+        # see paper for their meanings
+        colours = colour(output_word, correct_output_word)
+        
+        # add current guess to the inputs for the next guess
+        input_values = np.concatenate((input_values, word_to_binary(output_word), colours_to_binary(colours)))
+        
+        # calculate the possible remaining words
+        remaining_words = options_from_guess(
+            remaining_words, colours, output_word)
+    
+    return -log2(remaining_words.size)
 
 
 # function that needs to be called before using model.predict
@@ -80,51 +121,43 @@ def set_neural_network_weights(model, solution):
 
 # returns a list of boolean integers representing the binary form of a word
 def word_to_binary(word):
-    return np.array([[0] * (ord(l) - 97) + [1] + [0] * (25 - (ord(l) - 97)) for l in word]).flatten().tolist()
+    return np.array([np.concatenate((np.zeros(l - 97), np.ones(1), np.zeros(25 - (l - 97)))) for l in word]).flatten()
 
 
 # returns a list of boolean integers representing the binary form of a set of RYG colours
 def colours_to_binary(colours):
-    return np.array([[0] * c + [1] + [0] * (2 - c) for c in colours]).flatten().tolist()
+    return np.array([np.concatenate((np.zeros(c), np.ones(1), np.zeros(2 - c))) for c in colours]).flatten()
 
 
 # r,y,g mapped to 0, 1, 2
-def colour(word, solution):
-    colours = [0, 0, 0, 0, 0]  # full gray default
-
-    for i, l, s in zip(range(5), word, solution):
-        if l == s:
-            colours[i] = 2 # green
-        # special yellow rule: if number of `l` in solution is less than
-        # the number of `l` in `word` up until `l` then make it gray instead of yellow
-        elif l in solution and solution.count(l) >= word[:i+1].count(l):
-            colours[i] = 1 # yellow
+def colour(word: np.ndarray, solution: np.ndarray):
+    colours = np.array([0, 0, 0, 0, 0]) # full gray default
+    
+    greens = word == solution
+    colours[greens] = 2 # green
+    
+    yellows = np.array([i for i, l in enumerate(word) if not greens[i] and np.count_nonzero(solution == l) >= np.count_nonzero(word[:i+1] == l)], dtype=int)
+    colours[yellows] = 1
 
     return colours
 
 
 # returns the valid options from a list of words that match a (colours, letters) pair
-def options_from_guess(possibilities: list[str], colours: list[int], guess: str):
-    grays, greens = [], []
-
+def options_from_guess(words: np.ndarray, colours: list[int], guess: str):
     yellows = defaultdict(lambda: 0)
     for i, c, l in zip(range(5), colours, guess):
         if c == 0:
-            grays.append((i, l))
+            words = words[words[:, i] != l]
         elif c == 1:
             # makes sure the spot that's yellow can't be the guessed letter
-            grays.append((i, l))
+            words = words[words[:, i] != l]
             # number of yellows of a certain letter <= the amount of the letter in the solution
             yellows[l] += 1
+            words = words[np.count_nonzero(words == l, axis=1) >= yellows[l]]
         elif c == 2:
-            greens.append((i, l))
+            words = words[words[:, i] == l]
     
-    return [
-        w for w in possibilities
-        if all(w[i] != l for i, l in grays)
-        and all(w[i] == l for i, l in greens)
-        and all(w.count(l) >= c for l, c in yellows.items())
-    ]
+    return words
 
 
 def load_settings():
@@ -255,7 +288,7 @@ def plot_fitness_training(fitness_scores,
 
 ga: pygad.GA = None
 # modified pygad function
-def mutation_randomly(offspring):
+def mutation_randomly_optimized(offspring):
         global ga
         
         """

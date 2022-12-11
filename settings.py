@@ -13,12 +13,13 @@ class Settings:
     random_mutation_min_val: int = -1.0
     random_mutation_max_val: int = 1.0
 
-    def create_ga(self, initial_population, fitness_func, on_start, on_generation, num_generations, keep_parents, keep_elitism) -> pygad.GA:
+    def create_ga(self, initial_population, fitness_func, on_start, on_fitness, on_generation, num_generations, keep_parents, keep_elitism) -> pygad.GA:
         return pygad.GA(
             num_generations=num_generations,
             initial_population=initial_population,
             fitness_func=fitness_func,
             on_start=on_start,
+            on_fitness=on_fitness,
             on_generation=on_generation,
             num_parents_mating=self.num_parents_mating,
             parent_selection_type=self.parent_selection_type,
