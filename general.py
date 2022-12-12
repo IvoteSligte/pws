@@ -24,7 +24,7 @@ def random_wordle_word():
     return np.random.choice(possible_wordle_words, size=1)
 
 
-max_fitness_per_word = -log2(possible_wordle_words.size)
+max_fitness_per_word = -log2(len(possible_wordle_words))
 
 model: tf.keras.models.Sequential = None
 num_generations = None
@@ -72,8 +72,8 @@ def on_generation(ga_instance):
     # auto saves every 5 mins
     if time.time_ns() - last_save_time > 300e9:
         save_count += 1
-        last_save_time = time.time_ns()
         save_ga(ga_instance, ai_name)
+        last_save_time = time.time_ns()
 
     first_guesses_since_save.append(set())
 
@@ -88,7 +88,7 @@ def fitness_func_core(correct_output_word):
     
     for _ in range(6):
         # convert input values to tensor
-        input_tensor = tf.convert_to_tensor([np.pad(input_values, (0, 725-input_values.size), 'constant')])
+        input_tensor = tf.convert_to_tensor([np.pad(input_values, (0, 725-len(input_values)), 'constant')])
         
         # get AI output
         output_word = allowed_wordle_words[np.argmax(model(input_tensor)[0].numpy())]
@@ -108,7 +108,7 @@ def fitness_func_core(correct_output_word):
         remaining_words = options_from_guess(
             remaining_words, colours, output_word)
     
-    return -log2(remaining_words.size)
+    return -log2(len(remaining_words))
 
 
 # function that needs to be called before using model.predict
@@ -136,25 +136,30 @@ def colour(word: np.ndarray, solution: np.ndarray):
     greens = word == solution
     colours[greens] = 2 # green
     
-    yellows = np.array([i for i, l in enumerate(word) if not greens[i] and np.count_nonzero(solution == l) >= np.count_nonzero(word[:i+1] == l)], dtype=int)
+    # number of l in solution which are not green = total possible yellows of letter l
+    # and must be > the number of yellows so far of letter l
+    # tldr; number of yellows left must be > 0
+    yellows = np.array([not greens[i] and np.count_nonzero((solution == l) & np.logical_not(greens)) > np.count_nonzero(((word == l) & np.logical_not(greens))[:i]) for i, l in enumerate(word)])
     colours[yellows] = 1
 
     return colours
 
 
 # returns the valid options from a list of words that match a (colours, letters) pair
-def options_from_guess(words: np.ndarray, colours: list[int], guess: str):
-    yellows = defaultdict(lambda: 0)
+def options_from_guess(words: np.ndarray, colours: np.ndarray, guess: np.ndarray):
+    prev_words = words
     for i, c, l in zip(range(5), colours, guess):
         if c == 0:
+            # grey letter cannot in be in the word, unless there are greens/yellows of that letter (but still not at this index)
             words = words[words[:, i] != l]
+            words = words[np.count_nonzero(words == l, axis=-1) == np.count_nonzero(colours[guess == l] >= 1)]
         elif c == 1:
             # makes sure the spot that's yellow can't be the guessed letter
             words = words[words[:, i] != l]
             # number of yellows of a certain letter <= the amount of the letter in the solution
-            yellows[l] += 1
-            words = words[np.count_nonzero(words == l, axis=1) >= yellows[l]]
+            words = words[np.count_nonzero(words == l, axis=-1) >= np.count_nonzero(colours[guess == l] >= 1)]
         elif c == 2:
+            # green letter has to be in the word
             words = words[words[:, i] == l]
     
     return words
