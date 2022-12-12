@@ -16,8 +16,7 @@ def fitness_func(solution, solution_idx):
     output_word = allowed_wordle_words[np.argmax(general.model(input_tensor)[0].numpy())]
     first_guesses_since_save[-1].add("".join(chr(l) for l in output_word))
     
-    fitness = sum(map(fitness_func_core, possible_wordle_words)) + max_fitness_per_word * len(possible_wordle_words)
-    return fitness
+    return sum(map(fitness_func_core, possible_wordle_words))
 
 
 def load(num_generations):    

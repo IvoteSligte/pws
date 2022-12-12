@@ -24,8 +24,6 @@ def random_wordle_word():
     return np.random.choice(possible_wordle_words, size=1)
 
 
-max_fitness_per_word = -log2(len(possible_wordle_words))
-
 model: tf.keras.models.Sequential = None
 num_generations = None
 generations_passed = 0
@@ -108,7 +106,7 @@ def fitness_func_core(correct_output_word):
         remaining_words = options_from_guess(
             remaining_words, colours, output_word)
     
-    return -log2(len(remaining_words))
+    return -log2(len(remaining_words) / len(possible_wordle_words))
 
 
 # function that needs to be called before using model.predict
