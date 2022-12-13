@@ -1,4 +1,5 @@
 from general import *
+import general
 from load import load
 from create import create, fitness_func
 from matplotlib import pyplot as plt
@@ -68,68 +69,24 @@ def plot_fitness(fitness_scores, save_dir=None):
 # select the best solution/AI from a pool
 # during training there are N AIs trained at a time,
 # but for testing and playing only one is required so the best one is used
-def select_best_solution(ga_instance: pygad.GA, model):
-    solution_fitnesses_and_finishes = defaultdict(lambda: ([], []))
+def select_best_solution(ga_instance: pygad.GA):
+    solution_fitnesses = defaultdict(lambda: [])
+    solution_finishes = defaultdict(lambda: [])
     
     # same principle as the fitness function in `create` and `load`
     def selection_fitness_func(solution, solution_idx):
         global possible_wordle_words
         global allowed_wordle_words
         
-        all_fitness_scores = []
-        all_finishes = [0 for _ in range(7)]
+        set_neural_network_weights(general.model, solution)
         
-        set_neural_network_weights(model, solution)
+        solution_fitnesses[solution_idx], solution_finishes[solution_idx] = zip(*map(fitness_func_core_with_finishes, possible_wordle_words))
         
-        for w, correct_output_word in enumerate(possible_wordle_words):
-            print(f"Current cycle progress: {w} / {len(possible_wordle_words)}")
-            
-            input_values = [0] * 725
-            remaining_words = possible_wordle_words
-            
-            fitness = 0.0
-            finish = 0
-
-            for i in range(6):
-                # convert input values to tensor
-                input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)
-                
-                # get AI output
-                output_tensor = model(input_tensor)[0].numpy()
-                output_index = np.argmax(output_tensor)
-                output_word = allowed_wordle_words[output_index]
-
-                # mark the guess with wordle's grey, yellow, green colours
-                # see paper for their meanings
-                colours = colour(output_word, correct_output_word)
-
-                # add current guess to the inputs for the next guess
-                input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
-
-                prev_remaining_words_len = len(remaining_words)
-                # calculate the possible remaining words
-                remaining_words = options_from_guess(
-                    remaining_words, colours, output_word)
-                
-                # information
-                fitness += -log2(len(remaining_words) / prev_remaining_words_len)
-                
-                # if AI wins, break the loop
-                if output_word == correct_output_word:
-                    fitness += 10.0
-                    finish = i + 1
-                    break
-            
-            all_fitness_scores.append(fitness)
-            all_finishes[finish] += 1
-
-        solution_fitnesses_and_finishes[solution_idx] = (all_fitness_scores, all_finishes)
-        
-        return sum(all_fitness_scores)
+        return sum(solution_fitnesses[solution_idx])
     
     ga_instance.fitness_func = selection_fitness_func
     best_sol = ga_instance.best_solution()
-    return (best_sol[0], solution_fitnesses_and_finishes[best_sol[2]])
+    return (best_sol[0], solution_fitnesses[best_sol[2]], solution_finishes[best_sol[2]])
 
 
 def test():
@@ -151,13 +108,14 @@ def test():
     
     print("Testing started.")
     
-    best_solution_fitnesses_and_finishes = select_best_solution(ga_instance, model)[1]
+    general.model = model
+    _, fitnesses, finishes = select_best_solution(ga_instance)
     
     print("Testing finished.")
 
-    plot_fitness(best_solution_fitnesses_and_finishes[0], save_dir=join(
+    plot_fitness(fitnesses, finishes[0], save_dir=join(
         "instances", name, "testing_fitness"))
-    plot_finishes(best_solution_fitnesses_and_finishes[1], save_dir=join(
+    plot_finishes(finishes, finishes[1], save_dir=join(
         "instances", name, "testing_finishes"))
 
 
@@ -172,7 +130,8 @@ def play():
     ga_instance: pygad.GA = pygad.load(join("instances", name, "algorithm"))
     
     print("Initializing... this may take a minute.")
-    solution, (_, finishes) = select_best_solution(ga_instance, model)[0]
+    general.model = model
+    solution, _, finishes = select_best_solution(ga_instance)[0]
     set_neural_network_weights(model, solution)
     print(f"Finished initializing. Chosen AI has a win rate of {(1.0 - len(possible_wordle_words) / (len(finishes[0]))) * 100.0 :.2f}%")
 

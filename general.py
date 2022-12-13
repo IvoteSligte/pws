@@ -93,7 +93,7 @@ def fitness_func_core(correct_output_word):
         
         # if AI wins, break the loop
         if np.array_equal(output_word, correct_output_word):
-            return 10.0
+            return 10.0 + log2(len(possible_wordle_words))
         
         # mark the guess with wordle's grey, yellow, green colours
         # see paper for their meanings
@@ -107,6 +107,39 @@ def fitness_func_core(correct_output_word):
             remaining_words, colours, output_word)
     
     return -log2(len(remaining_words) / len(possible_wordle_words))
+
+
+def fitness_func_core_with_finishes(correct_output_word):
+    global model
+    global possible_wordle_words
+    global allowed_wordle_words
+
+    remaining_words = possible_wordle_words.copy()
+    input_values = np.array([])
+
+    for i in range(6):
+        # convert input values to tensor
+        input_tensor = tf.convert_to_tensor([np.pad(input_values, (0, 725-len(input_values)), 'constant')])
+
+        # get AI output
+        output_word = allowed_wordle_words[np.argmax(model(input_tensor)[0].numpy())]
+
+        # if AI wins, break the loop
+        if np.array_equal(output_word, correct_output_word):
+            return (10.0 + log2(len(possible_wordle_words)), i + 1)
+
+        # mark the guess with wordle's grey, yellow, green colours
+        # see paper for their meanings
+        colours = colour(output_word, correct_output_word)
+
+        # add current guess to the inputs for the next guess
+        input_values = np.concatenate((input_values, word_to_binary(output_word), colours_to_binary(colours)))
+
+        # calculate the possible remaining words
+        remaining_words = options_from_guess(
+            remaining_words, colours, output_word)
+
+    return (-log2(len(remaining_words) / len(possible_wordle_words)), 0)
 
 
 # function that needs to be called before using model.predict
