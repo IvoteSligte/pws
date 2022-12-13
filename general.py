@@ -191,8 +191,6 @@ def save_ga(ga_instance: pygad.GA, name: str):
     
     fitness_scores = copy.deepcopy(fitness_scores_since_save)
     first_guesses = copy.deepcopy([list(x) for x in first_guesses_since_save]) # sets cannot be JSON serialized
-    if len(fitness_scores[-1]) == 0:
-        fitness_scores.pop()
     if len(first_guesses[-1]) == 0:
         first_guesses.pop()
     # initial value is time since last update, time before last update is added later
