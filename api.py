@@ -131,9 +131,9 @@ def play():
     
     print("Initializing... this may take a minute.")
     general.model = model
-    solution, _, finishes = select_best_solution(ga_instance)[0]
-    set_neural_network_weights(model, solution)
-    print(f"Finished initializing. Chosen AI has a win rate of {(1.0 - len(possible_wordle_words) / (len(finishes[0]))) * 100.0 :.2f}%")
+    solution, _, finishes = select_best_solution(ga_instance)
+    set_neural_network_weights(general.model, solution)
+    #print(f"Finished initializing. Chosen AI has a win rate of {(1.0 - len(possible_wordle_words) / (len(finishes[0]))) * 100.0 :.2f}%")
 
     print("How it works.")
     print("The Wordle AI will recommend guesses, which you need to use in your Wordle game.")
@@ -146,26 +146,21 @@ def play():
     print("Examples: RRGYR, RRRRR, RGGGY, GGGGG, YYYRR")
     
     while True:
-        input_values = [0] * 725
+        input_values = np.array([])
         
         for i in range(6):
-            # convert input values to tensor
-            input_tensor = tf.convert_to_tensor(np.array([input_values]), dtype=tf.float32)    
-        
-            # get AI output
-            output_tensor = model(input_tensor)[0].numpy()
-            output_index = np.argmax(output_tensor)
-            output_word = allowed_wordle_words[output_index]
+            input_tensor =  tf.convert_to_tensor([np.pad(input_values, (0, 725-len(input_values)), 'constant')])
+            output_word = allowed_wordle_words[np.argmax(general.model(input_tensor)[0].numpy())]
             
             print(f"\nGuess {i + 1}.")
-            print(f"The AI {name}'s recommended guess:", output_word)
+            print(f"The AI {name}'s recommended guess:", "".join(chr(l) for l in output_word))
             if i < 5:
                 colour_chars = input(f"Colours Wordle gave the guess: ").lower()
                 while any(c not in "ryg" for c in colour_chars) or len(colour_chars) != 5:
                     print("Invalid input. Please try again.")
                     colour_chars = input(f"Colours Wordle gave the guess: ").lower()
-                colours = [ord(c) - 97 for c in colour_chars]
-                input_values[i*145:(i+1)*145] = word_to_binary(output_word) + colours_to_binary(colours)
+                colours = [0 if c == "r" else (1 if c == "y" else 2) for c in colour_chars]
+                input_values = np.concatenate((input_values, word_to_binary(output_word), colours_to_binary(colours)))
         
         print("The game has ended.")
         
